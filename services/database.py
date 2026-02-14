@@ -67,3 +67,19 @@ class SupabaseService:
                 labels.add(linha['label'])
             
         return sorted(list(pessoas)), sorted(list(itens)), sorted(list(labels))
+    
+
+    def buscar_movimentacoes_adm(self):
+        """Retorna as últimas 20 movimentações para gestão"""
+        return self.client.table("movimentacoes") \
+            .select("*") \
+            .order("occurred_at", desc=True) \
+            .limit(20) \
+            .execute()
+
+    def deletar_movimentacao(self, registro_id):
+        """Apaga um registro por ID"""
+        return self.client.table("movimentacoes") \
+            .delete() \
+            .eq("id", registro_id) \
+            .execute()
