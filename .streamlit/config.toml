@@ -1,7 +1,7 @@
 [theme]
-primaryColor = "#58a6ff"
-backgroundColor = "#0d1117"
-secondaryBackgroundColor = "#161b22"
-textColor = "#adbac7"
+primaryColor = "#00ff41"          # Verde Matrix/Ragnarok para botões
+backgroundColor = "#0d1117"       # Fundo principal (Deep Dark)
+secondaryBackgroundColor = "#1c2128" # Fundo dos campos e sidebar (mais claro que o fundo)
+textColor = "#adbac7"             # Texto principal cinza claro
 font = "sans serif"
 base = "dark"

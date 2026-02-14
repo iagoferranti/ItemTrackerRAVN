@@ -83,3 +83,22 @@ class SupabaseService:
             .delete() \
             .eq("id", registro_id) \
             .execute()
+    
+    # Adicione este método à sua classe SupabaseService
+    def buscar_itens_pendentes(self):
+        """Retorna apenas itens que não estão no status 'CLÃ'"""
+        # Buscamos o estado atual de cada item
+        res = self.buscar_todas_movimentacoes()
+        if not res.data:
+            return []
+        
+        import pandas as pd
+        df = pd.DataFrame(res.data)
+        df['occurred_at'] = pd.to_datetime(df['occurred_at'], utc=True)
+        
+        # Pega o último registro de cada item
+        df_atual = df.sort_values('occurred_at').groupby(['item_name', 'label']).last().reset_index()
+        
+        # Filtra apenas o que não está no clã
+        pendentes = df_atual[df_atual['status'] == 'EMPRESTADO']
+        return pendentes.to_dict('records')

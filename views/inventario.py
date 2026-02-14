@@ -22,6 +22,7 @@ def exibir_inventario():
     df['occurred_at'] = pd.to_datetime(df['occurred_at'], errors='coerce', utc=True)
     df = df.dropna(subset=['occurred_at'])
 
+    # --- FILTROS DE BUSCA ---
     col_f1, col_f2 = st.columns(2)
     with col_f1:
         search_item = st.selectbox("Filtrar por Item:", options=["TODOS"] + lista_itens)
@@ -32,6 +33,7 @@ def exibir_inventario():
     idx_mais_recente = df.groupby(['item_name', 'label'])['occurred_at'].idxmax()
     df_atual = df.loc[idx_mais_recente].copy()
 
+    # Aplica os Filtros
     if search_item != "TODOS":
         df_atual = df_atual[df_atual['item_name'] == search_item]
     
@@ -44,20 +46,21 @@ def exibir_inventario():
 
     st.write("---")
     
+    # --- RENDERIZAÇÃO DOS CARDS ---
     for index, row in df_atual.iterrows():
-        # Lógica de Trava: O botão SÓ aparece se o status for exatamente 'EMPRESTADO'
         esta_emprestado = row['status'] == 'EMPRESTADO'
         is_no_cla = row['status'] == 'CLÃ'
         
         bg_color = "#161b22"
-        # Borda: Verde para Clã, Azul para Devolvido (Disponível), Vermelho para Emprestado
+        # Borda: Verde para Clã, Azul para Devolvido (Dono), Vermelho para Emprestado
         if is_no_cla: border_color = "#238636"
         elif esta_emprestado: border_color = "#da3633"
-        else: border_color = "#1f6feb" # Azul para status 'DEVOLVIDO'
+        else: border_color = "#1f6feb" 
 
         data_formatada = row['occurred_at'].strftime('%d/%m/%Y %H:%M')
 
         with st.container():
+            # Card HTML estilizado para Dark Mode
             st.markdown(f"""
                 <div style="background-color: {bg_color}; border-left: 5px solid {border_color}; padding: 8px 15px; border-radius: 4px; margin-bottom: 5px;">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -78,23 +81,22 @@ def exibir_inventario():
                 </div>
             """, unsafe_allow_html=True)
             
-            # Botões de Ação: Só aparecem se o item estiver com alguém (EMPRESTADO)
+            # --- BOTÕES DE AÇÃO RÁPIDA ---
             if esta_emprestado:
                 btn_col1, btn_col2, _ = st.columns([1.5, 1.5, 4])
                 with btn_col1:
                     if st.button(f"Devolver p/ Clã 🏛️", key=f"cla_{index}"):
                         executar_movimentacao_rapida(db, row['to_person'], "ARMAZÉM DO CLÃ", row, "CLÃ", "Devolução p/ Clã")
                 with btn_col2:
-                    # Inverte a ação: Devolve para quem emprestou
                     if st.button(f"Devolver p/ {row['from_person']} 👤", key=f"dono_{index}"):
                         executar_movimentacao_rapida(db, row['to_person'], row['from_person'], row, "DEVOLVIDO", f"Retorno p/ dono original")
             else:
-                # Se o item está no Clã ou foi Devolvido, mostramos apenas uma etiqueta discreta
                 st.caption(f"✅ Item disponível com {row['portador_real']}. Ciclo de empréstimo encerrado.")
             
             st.write("") 
 
 def executar_movimentacao_rapida(db, de, para, row, status, nota):
+    """Automatiza a inserção no banco e a notificação no Discord"""
     agora = datetime.datetime.now().isoformat()
     payload = {
         "from_person": de, "to_person": para, "item_name": row['item_name'],
@@ -103,7 +105,7 @@ def executar_movimentacao_rapida(db, de, para, row, status, nota):
     try:
         db.inserir_movimentacao(payload)
         
-        # --- NOVO: DISPARO DE NOTIFICAÇÃO NO DISCORD ---
+        # Disparo de notificação para o Discord do Clã
         discord = DiscordService()
         discord.enviar_log_movimentacao(
             item=row['item_name'], 
@@ -113,7 +115,7 @@ def executar_movimentacao_rapida(db, de, para, row, status, nota):
             label=row['label']
         )
         
-        st.toast(f"✅ {row['item_name']} atualizado e notificado!")
+        st.toast(f"✅ {row['item_name']} atualizado e notificado!", icon='🚀')
         st.rerun()
     except Exception as e:
-        st.error(f"Erro: {e}")
+        st.error(f"Erro ao processar ação rápida: {e}")

@@ -3,14 +3,11 @@ from services.database import SupabaseService
 from services.notifications import DiscordService
 import datetime
 
-from services.notifications import DiscordService
-
 def exibir_registrar():
     db = SupabaseService()
     st.header("📦 Registrar Novo Repasse")
     
     # --- FEEDBACK DO ÚLTIMO REGISTRO ---
-    # Mantém uma faixa informativa caso uma ação tenha acabado de ser realizada
     if "ultimo_registro" in st.session_state:
         reg = st.session_state.ultimo_registro
         st.info(f"✨ **Último registro:** {reg['item']} ({reg['label']}) -> **{reg['to']}**")
@@ -19,7 +16,6 @@ def exibir_registrar():
     lista_pessoas, lista_itens, lista_labels = db.get_opcoes_autocomplete()
 
     # --- BLOCO 1: IDENTIFICAÇÃO DO ITEM ---
-    # Usamos um container com borda para separar visualmente a seção do item
     with st.container(border=True):
         st.subheader("🔍 Informações do Item")
         col_item1, col_item2 = st.columns(2)
@@ -28,7 +24,7 @@ def exibir_registrar():
             item_sel = st.selectbox("Selecione o Item:", options=["[DIGITAR NOVO]"] + lista_itens)
             if item_sel == "[DIGITAR NOVO]":
                 item = st.text_input("Nome do Novo Item:").upper().strip()
-                portador_sugerido = "[DIGITAR NOVO]" # Item novo não tem portador antigo
+                portador_sugerido = "[DIGITAR NOVO]"
             else:
                 item = item_sel
                 st.info(f"Item: **{item}**")
@@ -39,10 +35,10 @@ def exibir_registrar():
             else:
                 label_sel = st.selectbox("Selecione a Label:", options=lista_labels)
                 label = label_sel
-                # INTELIGÊNCIA: Busca quem é o dono atual desse item específico
+                # Busca quem é o dono atual desse item específico
                 portador_sugerido = db.get_portador_atual(item, label)
 
-    st.write("") # Espaçador visual
+    st.write("") 
 
     # --- BLOCO 2: DETALHES DA MOVIMENTAÇÃO ---
     with st.container(border=True):
@@ -50,37 +46,68 @@ def exibir_registrar():
         col_mov1, col_mov2 = st.columns(2)
         
         with col_mov1:
-            # O campo 'De' já sugere quem o banco de dados indicou como portador atual
-            from_p_sel = st.selectbox("De (Quem está passando):", 
-                                      options=[portador_sugerido] + [p for p in lista_pessoas if p != portador_sugerido])
+            st.markdown("**ORIGEM**")
             
+            # --- CORREÇÃO DA DUPLICIDADE ---
+            # Começamos a lista com o portador sugerido pelo banco
+            opcoes_origem = [portador_sugerido]
+            # Adicionamos o resto das pessoas da lista
+            for p in lista_pessoas:
+                if p != portador_sugerido:
+                    opcoes_origem.append(p)
+            # Só adicionamos o "[DIGITAR NOVO]" ao final se ele já não for o sugerido
+            if "[DIGITAR NOVO]" not in opcoes_origem:
+                opcoes_origem.append("[DIGITAR NOVO]")
+
+            from_p_sel = st.selectbox(
+                "Quem está passando o item:", 
+                options=opcoes_origem,
+                key="from_sel"
+            )
+            
+            from_p_novo = ""
             if from_p_sel == "[DIGITAR NOVO]":
-                from_p = st.text_input("Nome do novo Portador:").upper().strip()
+                from_p_novo = st.text_input("👉 Digite AQUI o nome do NOVO Portador:").upper().strip()
+                from_p = from_p_novo
             else:
                 from_p = from_p_sel
-                if portador_sugerido != "[DIGITAR NOVO]":
-                    st.caption(f"💡 Sugestão automática: **{portador_sugerido}**")
+                if from_p != "[DIGITAR NOVO]":
+                    st.success(f"Confirmado: **{from_p}**")
 
             status = st.selectbox("Status da Ação:", ["EMPRESTADO", "DEVOLVIDO", "CLÃ"])
 
         with col_mov2:
-            to_p_sel = st.selectbox("Para (Quem está recebendo):", options=["[DIGITAR NOVO]"] + lista_pessoas)
+            st.markdown("**DESTINO**")
+            # Para o destino, a lista é simples, sem sugestão inteligente
+            to_p_sel = st.selectbox(
+                "Quem vai receber o item:", 
+                options=["[DIGITAR NOVO]"] + lista_pessoas,
+                key="to_sel"
+            )
+            
+            to_p_novo = ""
             if to_p_sel == "[DIGITAR NOVO]":
-                to_p = st.text_input("Nome do novo Destinatário:").upper().strip()
+                to_p_novo = st.text_input("👉 Digite AQUI o nome do NOVO Destinatário:").upper().strip()
+                to_p = to_p_novo
             else:
                 to_p = to_p_sel
+                if to_p != "[DIGITAR NOVO]":
+                    st.success(f"Confirmado: **{to_p}**")
                 
             data_evento = st.date_input("Data do Evento:", datetime.date.today())
 
         notes = st.text_area("Observações Adicionais (Opcional):")
 
-    # --- BOTÃO DE SALVAMENTO ---
-    # use_container_width faz o botão ocupar a largura toda, ficando mais fácil de clicar no mobile
+    # --- BOTÃO DE SALVAMENTO COM TRAVA DE SEGURANÇA ---
     if st.button("💾 Confirmar Registro de Movimentação", use_container_width=True):
-        if not from_p or not to_p or not item:
-            st.error("⚠️ Erro: Os campos 'De', 'Para' e 'Item' são obrigatórios.")
+        erro_novo_de = from_p_sel == "[DIGITAR NOVO]" and not from_p_novo
+        erro_novo_para = to_p_sel == "[DIGITAR NOVO]" and not to_p_novo
+        
+        if erro_novo_de or erro_novo_para:
+            st.error("❌ Erro de Preenchimento: Você selecionou '[DIGITAR NOVO]', mas esqueceu de escrever o nome na caixa de texto.")
+        elif not from_p or not to_p or not item or from_p == "[DIGITAR NOVO]" or to_p == "[DIGITAR NOVO]":
+            st.error("⚠️ Erro: Os campos de 'Portador', 'Destinatário' e 'Item' precisam ser preenchidos corretamente.")
         else:
-            # Combina a data selecionada com o horário atual para precisão no histórico
             agora = datetime.datetime.now().time()
             dt_combinada = datetime.datetime.combine(data_evento, agora).isoformat()
             
@@ -97,18 +124,17 @@ def exibir_registrar():
             try:
                 db.inserir_movimentacao(payload)
 
+                # Notificação Discord
                 discord = DiscordService()
                 discord.enviar_log_movimentacao(item, from_p, to_p, status, label)
                 
-                # Salva no estado da sessão para mostrar o feedback após o refresh
+                # Feedback e Reset
                 st.session_state.ultimo_registro = {
                     "item": item, "to": to_p, "label": label
                 }
                 
                 st.toast(f"✅ {item} registrado com sucesso!", icon='🚀')
                 st.balloons()
-                
-                # Recarrega a página para limpar os campos e atualizar as listas de sugestão
                 st.rerun()
             except Exception as e:
                 st.error(f"❌ Erro ao salvar no banco de dados: {e}")

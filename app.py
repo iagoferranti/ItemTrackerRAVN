@@ -36,6 +36,29 @@ def main():
     st.set_page_config(page_title="RAVN Tracker", layout="wide")
     db = SupabaseService()
 
+    st.markdown("""
+    <style>
+    /* Estilização do Botão Confirmar */
+    div.stButton > button:first-child {
+        background-color: #238636;
+        color: white;
+        border: 1px solid #2ea043;
+        font-weight: bold;
+        transition: 0.3s;
+    }
+    div.stButton > button:first-child:hover {
+        background-color: #2ea043;
+        border-color: #3fb950;
+        transform: scale(1.02);
+    }
+    /* Melhora o contraste dos labels (nomes dos campos) */
+    .stMarkdown p {
+        color: #adbac7 !important;
+        font-weight: 500;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     # --- SIDEBAR COM MÉTRICAS EM TEMPO REAL ---
     with st.sidebar:
         st.title("🦅 RAVN Tracker")
@@ -51,18 +74,48 @@ def main():
                 df_atual = df.loc[df.groupby(['item_name', 'label'])['occurred_at'].idxmax()]
                 
                 total = len(df_atual)
+
+                # Agora 'Disponíveis' engloba o que está no Clã e o que voltou para o Dono
+                disponiveis = len(df_atual[df_atual['status'].isin(['CLÃ', 'DEVOLVIDO'])])
                 no_cla = len(df_atual[df_atual['status'] == 'CLÃ'])
-                emprestados = total - no_cla
+                emprestados = total - disponiveis
 
                 st.divider()
-                st.metric("📦 Itens Totais", total)
-                st.metric("🏛️ No Armazém", no_cla)
+                # st.metric("📦 Itens Totais", total)
+                # st.metric("🏛️ Disponíveis (Clã/Dono)", disponiveis)
                 st.metric("🔴 Emprestados", emprestados)
                 st.divider()
         except Exception:
             st.sidebar.warning("📊 Estatísticas indisponíveis")
 
         menu = st.radio("Navegação:", ["Inventário", "Registrar Repasse", "Histórico Geral", "Admin"])
+
+    # --- ÁREA PRINCIPAL DE RENDERIZAÇÃO ---st.divider()
+    st.subheader("⚠️ Pendências Ativas")
+
+    pendentes = db.buscar_itens_pendentes()
+
+    if not pendentes:
+        st.success("Tudo em ordem no armazém!")
+    else:
+        for p in pendentes:
+            # Cálculo dos dias
+            hoje = pd.Timestamp.now(tz='UTC')
+            data_mov = pd.to_datetime(p['occurred_at'], utc=True)
+            dias = (hoje - data_mov).days
+            
+            # Cor do alerta baseada no tempo
+            if dias < 3:
+                emoji_tempo = "🟢"
+            elif dias < 7:
+                emoji_tempo = "🟡"
+            else:
+                emoji_tempo = "🔴"
+                
+            with st.expander(f"{emoji_tempo} {p['to_person']}"):
+                st.caption(f"**Item:** {p['item_name']}")
+                st.caption(f"**Tempo:** {dias} dia(s) fora")
+                st.caption(f"**Desde:** {data_mov.strftime('%d/%m')}")
 
     # --- RENDERIZAÇÃO DAS TELAS ---
     if menu == "Inventário":
