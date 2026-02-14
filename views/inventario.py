@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from services.database import SupabaseService
+from services.notifications import DiscordService
 import datetime
 
 def exibir_inventario():
@@ -94,7 +95,6 @@ def exibir_inventario():
             st.write("") 
 
 def executar_movimentacao_rapida(db, de, para, row, status, nota):
-    # Captura data e hora exata da ação
     agora = datetime.datetime.now().isoformat()
     payload = {
         "from_person": de, "to_person": para, "item_name": row['item_name'],
@@ -102,7 +102,18 @@ def executar_movimentacao_rapida(db, de, para, row, status, nota):
     }
     try:
         db.inserir_movimentacao(payload)
-        st.toast(f"✅ Movimentação concluída!")
+        
+        # --- NOVO: DISPARO DE NOTIFICAÇÃO NO DISCORD ---
+        discord = DiscordService()
+        discord.enviar_log_movimentacao(
+            item=row['item_name'], 
+            de=de, 
+            para=para, 
+            status=status, 
+            label=row['label']
+        )
+        
+        st.toast(f"✅ {row['item_name']} atualizado e notificado!")
         st.rerun()
     except Exception as e:
         st.error(f"Erro: {e}")
